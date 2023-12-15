@@ -393,7 +393,7 @@ impl PrivateTowerServices for Arc<InternalAPI> {
                 // TODO: Should make it return locators and make `get_appointments` queryable using the (user_id, locator) pair for consistency.
                 appointments: locators
                     .into_iter()
-                    .map(|locator| UUID::new(locator, user_id).to_vec())
+                    .map(|locator| locator.to_vec())
                     .collect(),
             })),
             None => Err(Status::new(Code::NotFound, "User not found")),
