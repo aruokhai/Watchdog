@@ -390,7 +390,7 @@ impl PrivateTowerServices for Arc<InternalAPI> {
             Some((info, locators)) => Ok(Response::new(msgs::GetUserResponse {
                 available_slots: info.available_slots,
                 subscription_expiry: info.subscription_expiry,
-                // TODO: Should make it return locators and make `get_appointments` queryable using the (user_id, locator) pair for consistency.
+                // TODO: Should make `get_appointments` queryable using the (user_id, locator) pair for consistency.
                 appointments: locators
                     .into_iter()
                     .map(|locator| locator.to_vec())
