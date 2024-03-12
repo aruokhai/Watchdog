@@ -1,0 +1,22 @@
+[package]
+name = "ldk-integeration"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lightning = { version = "0.0.121" }
+serde_json = "1.0.114" 
+serde = "1.0.130"
+log = "0.4.16"
+
+
+
+# Local
+teos-common = { path = "../teos-common" }
+
+# client
+watchtower-plugin = { path = "../watchtower-plugin"}
+
+bitcoin = "0.28.0"
