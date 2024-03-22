@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use teos_common::appointment::{Appointment, Locator};
 use teos_common::net::NetAddr;
@@ -20,7 +20,7 @@ pub mod wt_client;
 mod test_utils;
 
 /// The status the tower can be found at.
-#[derive(Clone, Serialize, PartialEq, Eq, Copy, Debug)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Copy, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TowerStatus {
     Reachable,
@@ -100,7 +100,7 @@ impl TowerStatus {
 }
 
 /// Summarized data associated with a given tower.
-#[derive(Clone, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize,Deserialize, Debug, PartialEq, Eq)]
 pub struct TowerSummary {
     #[serde(flatten)]
     pub net_addr: NetAddr,

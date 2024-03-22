@@ -3,5 +3,6 @@
 members = [
     "teos",
     "teos-common",
-    "watchtower-plugin"
+    "watchtower-plugin",
+    "ldk-integeration",
 ]

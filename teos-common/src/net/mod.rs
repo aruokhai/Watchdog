@@ -1,11 +1,12 @@
 pub mod http;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Represents all types of teos network addresses
-#[derive(Clone, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Debug, Default, PartialEq, Eq)]
 pub enum AddressType {
+    #[default]
     IpV4 = 0,
     TorV3 = 1,
 }
@@ -60,7 +61,7 @@ impl AddressType {
     }
 }
 
-#[derive(Clone, Serialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize,Default, Debug, PartialEq, Eq)]
 pub struct NetAddr {
     net_addr: String,
     #[serde(skip)]
