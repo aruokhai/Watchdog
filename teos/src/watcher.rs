@@ -423,7 +423,8 @@ impl Watcher {
         self.dbm.lock().unwrap().load_appointments(None)
     }
 
-    /// Gets all the appointments matching a specific locator and an optional user id from the [Watcher] (from the database).
+    /// Gets all the appointments matching a specific locator
+    /// If a user id is provided (optional), only the appointments matching that user are returned
     pub(crate) fn get_watcher_appointments_with_locator(
         &self,
         locator: Locator,
