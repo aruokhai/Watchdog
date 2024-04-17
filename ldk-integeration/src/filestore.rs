@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::io::ErrorKind;
 
 use lightning::util::persist::KVStore;
 use bitcoin::secp256k1::SecretKey;
+use serde::Serializer;
 use teos_common::TowerId;
 use serde::Serialize;
 use serde::Deserialize;
@@ -19,19 +21,20 @@ pub struct TowerInfo {
 
 pub type TowerList = HashMap<TowerId,TowerInfo>;
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserInfo(pub SecretKey);
 
 
 #[derive(Debug)]
-pub enum Error {
+pub enum FilestoreError {
     EncodingIssue,
     DecodingIssue,
-    FetchingIssue,
     MissingForeignKey,
     MissingField,
     NotFound,
     TowerNotFound,
+    IOError(ErrorKind)
+
 }
 
 const PRIAMRY_NAMESPACE: &str = "watchtower";
@@ -48,63 +51,83 @@ impl<T:KVStore> Filestore<T> {
         Filestore(store)
     }
 
-    pub fn write_user_details(&self, user_info: UserInfo) -> Result<(), Error> {
-        let data = serde_json::to_string(&user_info).map_err(|_| Error::EncodingIssue )?;
-        let encoded_details = data.as_bytes();
-        self.store.write(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, USER_KEY, encoded_details);
-        Ok(())
+    pub fn write_user_details(&self, user_info: UserInfo) -> Result<(), FilestoreError> {
+        let data = user_info.0.secret_bytes();
+        let encoded_details = data.as_ref();
+        self.0.write(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, USER_KEY, encoded_details).map_err(|err| FilestoreError::IOError(err.kind()))
     }
 
-    pub fn get_user_details(&self) -> Result<UserInfo, Error> {
-        let data = self.store.read(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, USER_KEY).map_err(|_| Error::FetchingIssue)?;
+    pub fn get_user_details(&self) -> Result<UserInfo, FilestoreError> {
+        let data = self.0.read(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, USER_KEY).map_err(|err| FilestoreError::IOError(err.kind()))?;
         let encoded_user_details = data.as_slice();
-        let secret: UserInfo = serde_json::from_slice(encoded_user_details).map_err(|_| Error::DecodingIssue)?;
-        return Ok(secret);
+        let secret =  SecretKey::from_slice(encoded_user_details).map_err(|_| FilestoreError::DecodingIssue)?;
+        let user_info = UserInfo(secret);
+        return Ok(user_info);
     }
 
-    pub fn get_towerlist(&self) -> Result<TowerList, Error> {
-        let data = self.store.read(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, TOWERLIST_KEY).map_err(|_| Error::FetchingIssue)?;
+    pub fn get_towerlist(&self) -> Result<TowerList, FilestoreError> {
+        let data = self.0.read(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, TOWERLIST_KEY).map_err(|err| FilestoreError::IOError(err.kind()))?;
         let encoded_towerlist = data.as_slice();
-        let towerlist: TowerList = serde_json::from_slice(encoded_towerlist).map_err(|_| Error::DecodingIssue)?;
+        let towerlist: TowerList = serde_json::from_slice(encoded_towerlist).map_err(|_| FilestoreError::DecodingIssue)?;
         return Ok(towerlist) 
     }
 
-    pub fn get_tower(&self, tower_id: TowerId) -> Result<TowerInfo, Error> {
+    pub fn get_tower(&self, tower_id: TowerId) -> Result<TowerInfo, FilestoreError> {
         let towerlist = self.get_towerlist()?;
-        towerlist.get(&tower_id).ok_or(Error::TowerNotFound)
+        let tower = towerlist.get(&tower_id).ok_or(FilestoreError::TowerNotFound)?;
+        Ok(tower.to_owned())
     }
 
-    pub fn write_tower(&self, tower_id: TowerId, tower_info: TowerInfo) -> Result<(), Error> {
-        let mut towers = self.read_towers()?;
+    pub fn write_tower(&self, tower_id: TowerId, tower_info: TowerInfo) -> Result<(), FilestoreError> {
+        let mut towers = self.get_towerlist()?;
         towers.insert(tower_id, tower_info );
-        self.write_towers(towers)?;
-        return Ok(()) 
+        self.write_towerlist(towers)
     }
 
-    pub fn write_towers(&self, towers: TowerList) -> Result<(),Error> {
-        let data = serde_json::to_string(&towers).map_err(|_| Error::EncodingIssue )?;
+    pub fn write_towerlist(&self, towers: TowerList) -> Result<(),FilestoreError> {
+        let data = serde_json::to_string(&towers).map_err(|_| FilestoreError::EncodingIssue )?;
         let encoded_tower_details = data.as_bytes();
-        let _  = self.store.write(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, TOWERLIST_KEY, encoded_tower_details).map_err(|_| Error::EncodingIssue)?;
-        Ok(())
+        self.0.write(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, TOWERLIST_KEY, encoded_tower_details).map_err(|err| FilestoreError::IOError(err.kind()))
     }
 
 }
 
+
+
+
 #[cfg(test)]
 mod tests {
-    use teos_common::test_utils::get_random_int;
 
     use super::*;
     use crate::test_utils::{
-        get_random_user_info, TestStore
+        get_random_tower, get_random_user_info, TestStore
     };
 
     #[test]
     fn test_write_user_details() {
         let filestore =  Filestore::<TestStore>::new(TestStore::new());
         let user_info = get_random_user_info();
-        let randoM_numbers = get_random_int();
-        filestore.write_user_details(user_info);
+        let _ = filestore.write_user_details(user_info);
+        assert_eq!(filestore.0.store.into_inner().values().len(), 1)
+    }
+
+    #[test]
+    fn test_get_user_details() {
+        let filestore =  Filestore::<TestStore>::new(TestStore::new());
+        let user_info = get_random_user_info();
+        let _ = filestore.write_user_details(user_info.clone());
+        let data = filestore.get_user_details().unwrap();
+        assert_eq!(data, user_info)
+    }
+
+    #[test]
+    fn test_write_tower() {
+        let filestore =  Filestore::<TestStore>::new(TestStore::new());
+        let towerinfo = get_random_tower();
+        let _ = filestore.write_tower(towerinfo.0, towerinfo.1);
+        let store_length = filestore.0.store.into_inner().values().len();
+        println!("len {}", store_length);
+        assert_eq!(store_length, 1)
     }
 
 }
