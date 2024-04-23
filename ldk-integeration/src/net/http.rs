@@ -1,10 +1,14 @@
 use reqwest::blocking::{Response};
 use reqwest::Method;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use teos_common::receipts::AppointmentReceipt;
+use teos_common::cryptography::get_random_keypair;
+use teos_common::receipts::{AppointmentReceipt, RegistrationReceipt};
+use teos_common::test_utils::{get_random_appointment_receipt, get_random_registration_receipt};
 use teos_common::{net::{http::Endpoint, NetAddr}, TowerId, UserId};
 use teos_common::appointment::{Appointment, Locator};
 use teos_common::{cryptography, protos as common_msgs};
+
+use crate::test_utils::get_random_tower;
 /// Represents a generic api response.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
@@ -78,101 +82,123 @@ impl RequestError {
 //     })
 // }
 
-pub fn add_update_appointment(
-    tower_id: TowerId,
-    tower_net_addr: &NetAddr,
-    appointment: &Appointment,
-    signature: &str,
-) -> Result<(u32, AppointmentReceipt), AddAppointmentError> {
-    log::debug!(
-        "Sending appointment {} to tower {tower_id}",
-        appointment.locator
-    );
-    let request_data = common_msgs::AddAppointmentRequest {
-        appointment: Some(appointment.clone().into()),
-        signature: signature.to_owned(),
-    };
-    let response = post_request(
-        tower_net_addr,
-        Endpoint::AddAppointment,
-        &request_data,
-    )
-    .map_err(|err| AddAppointmentError::RequestError(err))
-    .map(|response| response.json().map_err(
-        |e|
-        AddAppointmentError::ConversionError(format!("Unexpected response body. Error: {e}"))))??;
+pub  fn register(
+        tower_id: TowerId,
+        user_id: UserId,
+        tower_net_addr: &NetAddr,
+    ) -> Result<RegistrationReceipt, RequestError> {
 
-    match response {
-
-        ApiResponse::Response::<common_msgs::AddAppointmentResponse>(r) => {
-            let receipt = AppointmentReceipt::with_signature(
-                signature.to_owned(),
-                r.start_block,
-                r.signature.clone(),
-            );
-            let recovered_id = TowerId(
-                cryptography::recover_pk(&receipt.to_vec(), &receipt.signature().unwrap()).unwrap(),
-            );
-            if recovered_id == tower_id {
-                Ok((r.available_slots, receipt))
-            } else {
-                Err(AddAppointmentError::SignatureError)
-            }
-        }
-        _ => Err(AddAppointmentError::Unexpected),
-
+    let random_receipt = get_random_registration_receipt();
+    Ok(random_receipt)
     }
     
 
-}
-
-
-
-
-/// A generic function to send a request to a tower.
-fn request<S: Serialize>(
-    tower_net_addr: &NetAddr,
-    endpoint: Endpoint,
-    method: Method,
-    data: Option<S>,
-) -> Result<Response, RequestError> {
-    let client = reqwest::blocking::Client::new();
-
-    let mut request_builder = client.request(
-        method,
-        format!("{}{}", tower_net_addr.net_addr(), endpoint.path()),
-    );
-
-    if let Some(data) = data {
-        request_builder = request_builder.json(&data);
+pub fn add_update_appointment(
+        tower_id: TowerId,
+        tower_net_addr: &str,
+        appointment: &Appointment,
+        signature: &str,
+    ) -> Result<(u32, AppointmentReceipt), AddAppointmentError> {
+    let random_tower = get_random_keypair(); 
+    let random_receipt = get_random_appointment_receipt(random_tower.0);
+    Ok((4, random_receipt))
     }
 
-    request_builder.send().map_err(|e| {
-        log::debug!("An error ocurred when sending data to the tower: {e}");
-        if e.is_connect() | e.is_timeout() {
-            RequestError::ConnectionError(
-                "Cannot connect to the tower. Connection refused".to_owned(),
-            )
-        } else {
-            RequestError::Unexpected("Unexpected error ocurred (see logs for more info)".to_owned())
-        }
-    })
-}
+// pub fn add_update_appointment(
+//     tower_id: TowerId,
+//     tower_net_addr: &str,
+//     appointment: &Appointment,
+//     signature: &str,
+// ) -> Result<(u32, AppointmentReceipt), AddAppointmentError> {
+//     log::debug!(
+//         "Sending appointment {} to tower {tower_id}",
+//         appointment.locator
+//     );
+//     let request_data = common_msgs::AddAppointmentRequest {
+//         appointment: Some(appointment.clone().into()),
+//         signature: signature.to_owned(),
+//     };
+//     let response = post_request(
+//         tower_net_addr,
+//         Endpoint::AddAppointment,
+//         &request_data,
+//     )
+//     .map_err(|err| AddAppointmentError::RequestError(err))
+//     .map(|response| response.json().map_err(
+//         |e|
+//         AddAppointmentError::ConversionError(format!("Unexpected response body. Error: {e}"))))??;
 
-pub fn post_request<S: Serialize>(
-    tower_net_addr: &NetAddr,
-    endpoint: Endpoint,
-    data: S,
-) -> Result<Response, RequestError> {
-    request(tower_net_addr, endpoint, Method::POST, Some(data))
-}
+//     match response {
 
-pub fn get_request(
-    tower_net_addr: &NetAddr,
-    endpoint: Endpoint,
-) -> Result<Response, RequestError> {
-    request::<()>(tower_net_addr, endpoint, Method::GET, None)
-}
+//         ApiResponse::Response::<common_msgs::AddAppointmentResponse>(r) => {
+//             let receipt = AppointmentReceipt::with_signature(
+//                 signature.to_owned(),
+//                 r.start_block,
+//                 r.signature.clone(),
+//             );
+//             let recovered_id = TowerId(
+//                 cryptography::recover_pk(&receipt.to_vec(), &receipt.signature().unwrap()).unwrap(),
+//             );
+//             if recovered_id == tower_id {
+//                 Ok((r.available_slots, receipt))
+//             } else {
+//                 Err(AddAppointmentError::SignatureError)
+//             }
+//         }
+//         _ => Err(AddAppointmentError::Unexpected),
+
+//     }
+    
+
+// }
+
+
+
+
+// /// A generic function to send a request to a tower.
+// fn request<S: Serialize>(
+//     tower_net_addr: &NetAddr,
+//     endpoint: Endpoint,
+//     method: Method,
+//     data: Option<S>,
+// ) -> Result<Response, RequestError> {
+//     let client = reqwest::blocking::Client::new();
+
+//     let mut request_builder = client.request(
+//         method,
+//         format!("{}{}", tower_net_addr.net_addr(), endpoint.path()),
+//     );
+
+//     if let Some(data) = data {
+//         request_builder = request_builder.json(&data);
+//     }
+
+//     request_builder.send().map_err(|e| {
+//         log::debug!("An error ocurred when sending data to the tower: {e}");
+//         if e.is_connect() | e.is_timeout() {
+//             RequestError::ConnectionError(
+//                 "Cannot connect to the tower. Connection refused".to_owned(),
+//             )
+//         } else {
+//             RequestError::Unexpected("Unexpected error ocurred (see logs for more info)".to_owned())
+//         }
+//     })
+// }
+
+// pub fn post_request<S: Serialize>(
+//     tower_net_addr: &str,
+//     endpoint: Endpoint,
+//     data: S,
+// ) -> Result<Response, RequestError> {
+//     request(tower_net_addr, endpoint, Method::POST, Some(data))
+// }
+
+// pub fn get_request(
+//     tower_net_addr: &NetAddr,
+//     endpoint: Endpoint,
+// ) -> Result<Response, RequestError> {
+//     request::<()>(tower_net_addr, endpoint, Method::GET, None)
+// }
 
 
 
