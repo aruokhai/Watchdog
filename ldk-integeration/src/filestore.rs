@@ -25,7 +25,7 @@ pub type TowerList = HashMap<TowerId,TowerInfo>;
 pub struct UserInfo(pub SecretKey);
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum FilestoreError {
     EncodingIssue,
     DecodingIssue,
@@ -33,6 +33,8 @@ pub enum FilestoreError {
     MissingField,
     NotFound,
     TowerNotFound,
+    UserNotFound,
+    TowerlistNotFound,
     IOError(ErrorKind)
 
 }
@@ -58,8 +60,9 @@ impl<T:KVStore> Filestore<T> {
     }
 
     pub fn get_user_details(&self) -> Result<UserInfo, FilestoreError> {
-        let data = self.0.read(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, USER_KEY).map_err(|err| FilestoreError::IOError(err.kind()))?;
+        let data= self.0.read(PRIAMRY_NAMESPACE, SECONDARY_NAMESPACE, USER_KEY).map_err(|err| FilestoreError::IOError(err.kind()))?;
         let encoded_user_details = data.as_slice();
+        
         let secret =  SecretKey::from_slice(encoded_user_details).map_err(|_| FilestoreError::DecodingIssue)?;
         let user_info = UserInfo(secret);
         return Ok(user_info);
@@ -79,7 +82,12 @@ impl<T:KVStore> Filestore<T> {
     }
 
     pub fn write_tower(&self, tower_id: TowerId, tower_info: TowerInfo) -> Result<(), FilestoreError> {
-        let mut towers = self.get_towerlist()?;
+        let mut towers =  self.get_towerlist().map_or_else(|err| {
+            if err == FilestoreError::IOError(ErrorKind::NotFound) {
+                return Ok(HashMap::new())
+            };
+            Err(err)
+        },|towerlist| Ok(towerlist))?;
         towers.insert(tower_id, tower_info );
         self.write_towerlist(towers)
     }
@@ -124,10 +132,21 @@ mod tests {
     fn test_write_tower() {
         let filestore =  Filestore::<TestStore>::new(TestStore::new());
         let towerinfo = get_random_tower();
-        let _ = filestore.write_tower(towerinfo.0, towerinfo.1);
+        _ = filestore.write_tower(towerinfo.0, towerinfo.1);
         let store_length = filestore.0.store.into_inner().values().len();
         println!("len {}", store_length);
         assert_eq!(store_length, 1)
+    }
+
+    #[test]
+    fn test_get_tower() {
+        let filestore =  Filestore::<TestStore>::new(TestStore::new());
+        let towerinfo = get_random_tower();
+        _ = filestore.write_tower(towerinfo.0, towerinfo.1.clone());
+        let data = filestore.get_tower(towerinfo.0).unwrap();
+        assert_eq!(data, towerinfo.1);
+        let data = filestore.get_tower(get_random_tower().0);
+        assert_eq!(data, Err(FilestoreError::TowerNotFound));
     }
 
 }

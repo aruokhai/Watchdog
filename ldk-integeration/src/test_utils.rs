@@ -44,8 +44,7 @@ impl KVStore for TestStore {
     fn read(&self, primary_namespace: &str, secondary_namespace: &str, key: &str) -> Result<Vec<u8>, io::Error> {
         let store_key = format!("{}{}{}",primary_namespace, secondary_namespace,key);
         let inner_store = self.store.clone().into_inner();
-        let new_vec = Vec::new();
-        let data = inner_store.get(&store_key).or(Some(&new_vec)).unwrap();
+        let data = inner_store.get(&store_key).ok_or(std::io::Error::new(std::io::ErrorKind::NotFound, "not found"))?;
         Ok(data.to_owned())
     }
 	
