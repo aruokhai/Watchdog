@@ -1,5 +1,6 @@
 use std::convert::TryInto;
 
+use bitcoin::script::PushBytesBuf;
 use hex::FromHex;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -7,7 +8,7 @@ use rand::Rng;
 
 use bitcoin::hashes::Hash;
 use bitcoin::secp256k1::SecretKey;
-use bitcoin::{consensus, Script, Transaction, TxOut, Txid};
+use bitcoin::{consensus, ScriptBuf, Transaction, TxOut, Txid};
 
 use crate::appointment::{Appointment, Locator};
 use crate::cryptography;
@@ -49,12 +50,17 @@ pub fn generate_random_appointment(dispute_txid: Option<&Txid>) -> Appointment {
     let tx_bytes = Vec::from_hex(TX_HEX).unwrap();
     let mut penalty_tx: Transaction = consensus::deserialize(&tx_bytes).unwrap();
 
+    // Generate Random data, while formatting it to Push Byte Spec
+    let random_vector = cryptography::get_random_bytes(
+        get_random_int::<usize>() % 81);
+    let random_bytes = random_vector.as_slice();
+    let mut push_bytes_data = PushBytesBuf::new();
+    push_bytes_data.extend_from_slice(random_bytes).unwrap();
+
     // Append a random-sized OP_RETURN to make each transcation random in size.
     penalty_tx.output.push(TxOut {
         value: 0,
-        script_pubkey: Script::new_op_return(&cryptography::get_random_bytes(
-            get_random_int::<usize>() % 81,
-        )),
+        script_pubkey: ScriptBuf::new_op_return(&push_bytes_data),
     });
 
     let mut raw_locator: [u8; 16] = cryptography::get_random_bytes(16).try_into().unwrap();
